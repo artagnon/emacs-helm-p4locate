@@ -34,7 +34,7 @@
   "the silver searcher with helm interface"
   :group 'helm)
 
-(defcustom helm-sblocate-base-command "sblocate"
+(defcustom helm-sblocate-base-command "~/bin/p4locate"
   "Base command of `sbl'"
   :type 'string
   :group 'helm-sblocate)
