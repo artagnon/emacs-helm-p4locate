@@ -1,4 +1,4 @@
-# helm-sblocate.el
+# helm-p4locate.el
 
 ## Introduction
-`helm-sblocate.el` provides interfaces of `sblocate` with helm. It is a fork of `helm-ag.el`.
+`helm-p4locate.el` provides interfaces of `p4 find` with helm. It is a fork of `helm-ag.el`.
