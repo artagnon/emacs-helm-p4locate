@@ -1,9 +1,9 @@
-;;; helm-sblocate.el --- the silver searcher with helm interface -*- lexical-binding: t; -*-
+;;; helm-p4locate.el --- the silver searcher with helm interface -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2015 by Syohei YOSHIDA
 
 ;; Author: Syohei YOSHIDA <syohex@gmail.com>
-;; URL: https://github.com/syohex/emacs-helm-sblocate
+;; URL: https://github.com/syohex/emacs-helm-p4locate
 ;; Version: 0.33
 ;; Package-Requires: ((helm "1.5.6") (cl-lib "0.5"))
 
@@ -30,221 +30,221 @@
 
 (declare-function helm-read-file-name "helm-mode")
 
-(defgroup helm-sblocate nil
+(defgroup helm-p4locate nil
   "the silver searcher with helm interface"
   :group 'helm)
 
-(defcustom helm-sblocate-base-command "~/bin/p4locate"
-  "Base command of `sbl'"
+(defcustom helm-p4locate-base-command "~/bin/p4locate"
+  "Base command of `p4l'"
   :type 'string
-  :group 'helm-sblocate)
+  :group 'helm-p4locate)
 
-(defcustom helm-sblocate-command-option nil
-  "Command line option of `sbl'. This is appended after `helm-sblocate-base-command'"
+(defcustom helm-p4locate-command-option nil
+  "Command line option of `p4l'. This is appended after `helm-p4locate-base-command'"
   :type 'string
-  :group 'helm-sblocate)
+  :group 'helm-p4locate)
 
-(defcustom helm-sblocate-insert-at-point nil
+(defcustom helm-p4locate-insert-at-point nil
   "Insert thing at point as search pattern.
    You can set value same as `thing-at-point'"
   :type 'symbol
-  :group 'helm-sblocate)
+  :group 'helm-p4locate)
 
-(defcustom helm-sblocate-source-type 'one-line
+(defcustom helm-p4locate-source-type 'one-line
   "Style of candidates"
   :type '(choice (const :tag "Show file:line number:content in one line" one-line)
                  (const :tag "Helm file-line style" file-line))
-  :group 'helm-sblocate)
+  :group 'helm-p4locate)
 
-(defcustom helm-sblocate-use-grep-ignore-list nil
+(defcustom helm-p4locate-use-grep-ignore-list nil
   "Use `grep-find-ignored-files' and `grep-find-ignored-directories' as ignore pattern.
 They are specified to `--ignore' options."
   :type 'boolean
-  :group 'helm-sblocate)
+  :group 'helm-p4locate)
 
-(defcustom helm-sblocate-always-set-extra-option nil
-  "Always set `sbl' options of `helm-do-sbl'."
+(defcustom helm-p4locate-always-set-extra-option nil
+  "Always set `p4l' options of `helm-do-p4l'."
   :type 'boolean
-  :group 'helm-sblocate)
+  :group 'helm-p4locate)
 
-(defcustom helm-sblocate-fuzzy-match nil
+(defcustom helm-p4locate-fuzzy-match nil
   "Enable fuzzy match"
   :type 'boolean
-  :group 'helm-sblocate)
+  :group 'helm-p4locate)
 
-(defcustom helm-sblocate-edit-save t
+(defcustom helm-p4locate-edit-save t
   "Save buffers you edit at completed."
   :type 'boolean
-  :group 'helm-sblocate)
+  :group 'helm-p4locate)
 
-(defvar helm-sblocate--command-history '())
-(defvar helm-sblocate--context-stack nil)
-(defvar helm-sblocate--default-directory nil)
-(defvar helm-sblocate--last-default-directory nil)
-(defvar helm-sblocate--last-query nil)
-(defvar helm-sblocate--extra-options nil)
-(defvar helm-sblocate--extra-options-history nil)
-(defvar helm-sblocate--original-window nil)
-(defvar helm-do-sbl--default-target nil)
-(defvar helm-do-sbl--extensions nil)
+(defvar helm-p4locate--command-history '())
+(defvar helm-p4locate--context-stack nil)
+(defvar helm-p4locate--default-directory nil)
+(defvar helm-p4locate--last-default-directory nil)
+(defvar helm-p4locate--last-query nil)
+(defvar helm-p4locate--extra-options nil)
+(defvar helm-p4locate--extra-options-history nil)
+(defvar helm-p4locate--original-window nil)
+(defvar helm-do-p4l--default-target nil)
+(defvar helm-do-p4l--extensions nil)
 
-(defun helm-sblocate--save-current-context ()
+(defun helm-p4locate--save-current-context ()
   (let ((curpoint (with-helm-current-buffer
                     (point))))
     (helm-aif (buffer-file-name helm-current-buffer)
-        (push (list :file it :point curpoint) helm-sblocate--context-stack)
-      (push (list :buffer helm-current-buffer :point curpoint) helm-sblocate--context-stack))))
+        (push (list :file it :point curpoint) helm-p4locate--context-stack)
+      (push (list :buffer helm-current-buffer :point curpoint) helm-p4locate--context-stack))))
 
-(defsubst helm-sblocate--insert-thing-at-point (thing)
+(defsubst helm-p4locate--insert-thing-at-point (thing)
   (helm-aif (thing-at-point thing)
       (substring-no-properties it)
     ""))
 
-(defun helm-sblocate--searched-word ()
-  (if helm-sblocate-insert-at-point
-      (helm-sblocate--insert-thing-at-point helm-sblocate-insert-at-point)
+(defun helm-p4locate--searched-word ()
+  (if helm-p4locate-insert-at-point
+      (helm-p4locate--insert-thing-at-point helm-p4locate-insert-at-point)
     ""))
 
-(defun helm-sblocate--grep-ignore-list-to-options ()
+(defun helm-p4locate--grep-ignore-list-to-options ()
   (require 'grep)
   (cl-loop for ignore in (append grep-find-ignored-files
                                  grep-find-ignored-directories)
            collect (concat "--ignore=" ignore)))
 
-(defun helm-sblocate--parse-query (query)
+(defun helm-p4locate--parse-query (query)
   (let ((inputs (ignore-errors (split-string-and-unquote query))))
     (if (or (null inputs) (= (length inputs) 1))
         (list query)
-      (setq helm-sblocate--last-query (car (last inputs)))
+      (setq helm-p4locate--last-query (car (last inputs)))
       (append (butlast inputs) (last inputs)))))
 
-(defun helm-sblocate--construct-command (this-file)
-  (let* ((commands (split-string helm-sblocate-base-command nil t))
+(defun helm-p4locate--construct-command (this-file)
+  (let* ((commands (split-string helm-p4locate-base-command nil t))
          (command (car commands))
          (args (cdr commands)))
-    (when helm-sblocate-command-option
-      (let ((ag-options (split-string helm-sblocate-command-option nil t)))
+    (when helm-p4locate-command-option
+      (let ((ag-options (split-string helm-p4locate-command-option nil t)))
         (setq args (append args ag-options))))
-    (when helm-sblocate-use-grep-ignore-list
-      (setq args (append args (helm-sblocate--grep-ignore-list-to-options))))
-    (setq args (append args (helm-sblocate--parse-query helm-sblocate--last-query)))
+    (when helm-p4locate-use-grep-ignore-list
+      (setq args (append args (helm-p4locate--grep-ignore-list-to-options))))
+    (setq args (append args (helm-p4locate--parse-query helm-p4locate--last-query)))
     (when this-file
       (setq args (append args (list this-file))))
     (cons command args)))
 
-(defun helm-sblocate--init ()
+(defun helm-p4locate--init ()
   (let ((buf-coding buffer-file-coding-system))
     (helm-attrset 'recenter t)
     (with-current-buffer (helm-candidate-buffer 'global)
-      (let* ((default-directory (or helm-sblocate--default-directory
+      (let* ((default-directory (or helm-p4locate--default-directory
                                     default-directory))
-             (cmds (helm-sblocate--construct-command (helm-attr 'search-this-file)))
+             (cmds (helm-p4locate--construct-command (helm-attr 'search-this-file)))
              (coding-system-for-read buf-coding)
              (coding-system-for-write buf-coding))
         (let ((ret (apply 'process-file (car cmds) nil t nil (cdr cmds))))
           (if (zerop (length (buffer-string)))
-              (error "No output: '%s'" helm-sblocate--last-query)
+              (error "No output: '%s'" helm-p4locate--last-query)
             (unless (zerop ret)
               (unless (executable-find (car cmds))
-                (error "'sbl' is not installed."))
-              (error "Failed: '%s'" helm-sblocate--last-query))))
-        (helm-sblocate--save-current-context)))))
+                (error "'p4l' is not installed."))
+              (error "Failed: '%s'" helm-p4locate--last-query))))
+        (helm-p4locate--save-current-context)))))
 
-(defun helm-sblocate--search-only-one-file-p ()
-  (when (and helm-do-sbl--default-target (= (length helm-do-sbl--default-target) 1))
-    (let ((target (car helm-do-sbl--default-target)))
+(defun helm-p4locate--search-only-one-file-p ()
+  (when (and helm-do-p4l--default-target (= (length helm-do-p4l--default-target) 1))
+    (let ((target (car helm-do-p4l--default-target)))
       (unless (file-directory-p target)
         target))))
 
-(defun helm-sblocate--find-file-action (candidate find-func)
+(defun helm-p4locate--find-file-action (candidate find-func)
   (let* ((search-this-file (or (helm-attr 'search-this-file)
-                               (helm-sblocate--search-only-one-file-p)))
+                               (helm-p4locate--search-only-one-file-p)))
          (filename (or search-this-file candidate))
          (line (string-to-number candidate)))
     (funcall find-func filename)
     (goto-char (point-min))
     (forward-line (1- line))))
 
-(defun helm-sblocate--persistent-action (candidate)
+(defun helm-p4locate--persistent-action (candidate)
   (let* ((elems (split-string candidate ":"))
          (search-this-file (helm-attr 'search-this-file))
          (filename (or search-this-file (cl-first elems)))
          (line (string-to-number (if search-this-file
                                      (cl-first elems)
                                    (cl-second elems))))
-         (default-directory (or helm-sblocate--default-directory
-                                helm-sblocate--last-default-directory)))
+         (default-directory (or helm-p4locate--default-directory
+                                helm-p4locate--last-default-directory)))
     (find-file filename)
     (goto-char (point-min))
     (forward-line (1- line))
     (helm-highlight-current-line)))
 
-(defun helm-sblocate--validate-regexp (regexp)
+(defun helm-p4locate--validate-regexp (regexp)
   (condition-case nil
       (progn
         (string-match-p regexp "")
         t)
     (invalid-regexp nil)))
 
-(defun helm-sblocate--highlight-candidate (candidate)
+(defun helm-p4locate--highlight-candidate (candidate)
   (let ((limit (1- (length candidate)))
         (last-pos 0))
-    (when (helm-sblocate--validate-regexp helm-sblocate--last-query)
+    (when (helm-p4locate--validate-regexp helm-p4locate--last-query)
       (while (and (< last-pos limit)
-                  (string-match helm-sblocate--last-query candidate last-pos))
+                  (string-match helm-p4locate--last-query candidate last-pos))
         (put-text-property (match-beginning 0) (match-end 0)
                            'face 'helm-match
                            candidate)
         (setq last-pos (1+ (match-end 0)))))
     candidate))
 
-(defun helm-sblocate--candidate-transform-for-this-file (candidate)
+(defun helm-p4locate--candidate-transform-for-this-file (candidate)
   (when (string-match "\\`\\([^:]+\\):\\(.+\\)" candidate)
     (format "%s:%s"
             (propertize (match-string 1 candidate) 'face 'helm-grep-lineno)
-            (helm-sblocate--highlight-candidate (match-string 2 candidate)))))
+            (helm-p4locate--highlight-candidate (match-string 2 candidate)))))
 
-(defun helm-sblocate--candidate-transform-for-files (candidate)
+(defun helm-p4locate--candidate-transform-for-files (candidate)
   (when (string-match "\\`\\([^:]+\\):\\([^:]+\\):\\(.+\\)" candidate)
     (format "%s:%s:%s"
             (propertize (match-string 1 candidate) 'face 'helm-moccur-buffer)
             (propertize (match-string 2 candidate) 'face 'helm-grep-lineno)
-            (helm-sblocate--highlight-candidate (match-string 3 candidate)))))
+            (helm-p4locate--highlight-candidate (match-string 3 candidate)))))
 
-(defun helm-sblocate--candidate-transformer (candidate)
+(defun helm-p4locate--candidate-transformer (candidate)
   (if (helm-attr 'search-this-file)
-      (helm-sblocate--candidate-transform-for-this-file candidate)
-    (helm-sblocate--candidate-transform-for-files candidate)))
+      (helm-p4locate--candidate-transform-for-this-file candidate)
+    (helm-p4locate--candidate-transform-for-files candidate)))
 
-(defun helm-sblocate--action-find-file (candidate)
-  (helm-sblocate--find-file-action candidate 'find-file))
+(defun helm-p4locate--action-find-file (candidate)
+  (helm-p4locate--find-file-action candidate 'find-file))
 
-(defun helm-sblocate--action--find-file-other-window (candidate)
-  (helm-sblocate--find-file-action candidate 'find-file-other-window))
+(defun helm-p4locate--action--find-file-other-window (candidate)
+  (helm-p4locate--find-file-action candidate 'find-file-other-window))
 
-(defvar helm-sblocate--actions
-  '(("Open file" . helm-sblocate--action-find-file)
-    ("Open file other window" . helm-sblocate--action--find-file-other-window)))
+(defvar helm-p4locate--actions
+  '(("Open file" . helm-p4locate--action-find-file)
+    ("Open file other window" . helm-p4locate--action--find-file-other-window)))
 
-(defvar helm-sblocate-source
+(defvar helm-p4locate-source
   (helm-build-in-buffer-source "The Silver Searcher"
-    :init 'helm-sblocate--init
-    :real-to-display 'helm-sblocate--candidate-transformer
-    :persistent-action 'helm-sblocate--persistent-action
-    :fuzzy-match helm-sblocate-fuzzy-match
-    :action helm-sblocate--actions))
+    :init 'helm-p4locate--init
+    :real-to-display 'helm-p4locate--candidate-transformer
+    :persistent-action 'helm-p4locate--persistent-action
+    :fuzzy-match helm-p4locate-fuzzy-match
+    :action helm-p4locate--actions))
 
-(defvar helm-sblocate-source-grep
+(defvar helm-p4locate-source-grep
   '((name . "The Silver Searcher")
-    (init . helm-sblocate--init)
+    (init . helm-p4locate--init)
     (candidates-in-buffer)
     (type . file-line)
     (candidate-number-limit . 9999)))
 
 ;;;###autoload
-(defun helm-sblocate-pop-stack ()
+(defun helm-p4locate-pop-stack ()
   (interactive)
-  (let ((context (pop helm-sblocate--context-stack)))
+  (let ((context (pop helm-p4locate--context-stack)))
     (unless context
       (error "Context stack is empty !"))
     (helm-aif (plist-get context :file)
@@ -256,63 +256,63 @@ They are specified to `--ignore' options."
     (goto-char (plist-get context :point))))
 
 ;;;###autoload
-(defun helm-sblocate-clear-stack ()
+(defun helm-p4locate-clear-stack ()
   (interactive)
-  (setq helm-sblocate--context-stack nil))
+  (setq helm-p4locate--context-stack nil))
 
-(defun helm-sblocate--select-source ()
-  (if (eq helm-sblocate-source-type 'file-line)
-      'helm-sblocate-source-grep
-    'helm-sblocate-source))
+(defun helm-p4locate--select-source ()
+  (if (eq helm-p4locate-source-type 'file-line)
+      'helm-p4locate-source-grep
+    'helm-p4locate-source))
 
-(defun helm-sblocate--query ()
-  (let* ((searched-word (helm-sblocate--searched-word))
-         (query (read-string "Pattern: " searched-word 'helm-sblocate--command-history)))
+(defun helm-p4locate--query ()
+  (let* ((searched-word (helm-p4locate--searched-word))
+         (query (read-string "Pattern: " searched-word 'helm-p4locate--command-history)))
     (when (string= query "")
       (error "Input is empty!!"))
-    (setq helm-sblocate--last-query query)))
+    (setq helm-p4locate--last-query query)))
 
-(defsubst helm-sblocate--clear-variables ()
-  (setq helm-sblocate--last-default-directory nil))
+(defsubst helm-p4locate--clear-variables ()
+  (setq helm-p4locate--last-default-directory nil))
 
 ;;;###autoload
-(defun helm-sblocate-this-file ()
+(defun helm-p4locate-this-file ()
   (interactive)
-  (helm-sblocate--clear-variables)
+  (helm-p4locate--clear-variables)
   (let ((filename (file-name-nondirectory (buffer-file-name))))
-    (helm-sblocate--query)
-    (let ((source (helm-sblocate--select-source)))
+    (helm-p4locate--query)
+    (let ((source (helm-p4locate--select-source)))
       (helm-attrset 'search-this-file (buffer-file-name) (symbol-value source))
       (helm-attrset 'name (format "Search at %s" filename) (symbol-value source))
-      (helm :sources (list source) :buffer "*helm-sblocate*"))))
+      (helm :sources (list source) :buffer "*helm-p4locate*"))))
 
-(defsubst helm-sblocate--has-c-u-preffix-p ()
+(defsubst helm-p4locate--has-c-u-preffix-p ()
   (and current-prefix-arg
        (or (equal current-prefix-arg '(4))
            (equal current-prefix-arg '(-4)))))
 
-(defun helm-sblocate--get-default-directory ()
-  (if (helm-sblocate--has-c-u-preffix-p)
+(defun helm-p4locate--get-default-directory ()
+  (if (helm-p4locate--has-c-u-preffix-p)
       (file-name-as-directory
        (read-directory-name "Search directory: " nil nil t))
     default-directory))
 
-(defsubst helm-sblocate--helm-header (dir)
+(defsubst helm-p4locate--helm-header (dir)
   (concat "Search at " (abbreviate-file-name dir)))
 
-(defun helm-sblocate--run-other-window-action ()
+(defun helm-p4locate--run-other-window-action ()
   (interactive)
   (with-helm-alive-p
-    (helm-quit-and-execute-action 'helm-sblocate--action--find-file-other-window)))
+    (helm-quit-and-execute-action 'helm-p4locate--action--find-file-other-window)))
 
-(defsubst helm-sblocate--kill-edit-buffer ()
-  (kill-buffer (get-buffer "*helm-sblocate-edit*")))
+(defsubst helm-p4locate--kill-edit-buffer ()
+  (kill-buffer (get-buffer "*helm-p4locate-edit*")))
 
-(defun helm-sblocate--edit-commit ()
+(defun helm-p4locate--edit-commit ()
   (interactive)
   (goto-char (point-min))
   (let ((read-only-files 0)
-        (default-directory helm-sblocate--default-directory))
+        (default-directory helm-p4locate--default-directory))
     (while (re-search-forward "^\\([^:]+\\):\\([1-9][0-9]*\\):\\(.*\\)$" nil t)
       (let ((file (match-string-no-properties 1))
             (line (string-to-number (match-string-no-properties 2)))
@@ -324,33 +324,33 @@ They are specified to `--ignore' options."
             (forward-line (1- line))
             (delete-region (line-beginning-position) (line-end-position))
             (insert body)
-            (when helm-sblocate-edit-save
+            (when helm-p4locate-edit-save
               (save-buffer))))))
-    (select-window helm-sblocate--original-window)
-    (helm-sblocate--kill-edit-buffer)
+    (select-window helm-p4locate--original-window)
+    (helm-p4locate--kill-edit-buffer)
     (if (not (zerop read-only-files))
         (message "%d files are read-only and not editable." read-only-files)
-      (message "Success helm-sblocate-edit"))))
+      (message "Success helm-p4locate-edit"))))
 
-(defun helm-sblocate--edit-abort ()
+(defun helm-p4locate--edit-abort ()
   (interactive)
   (when (y-or-n-p "Discard changes ?")
-    (select-window helm-sblocate--original-window)
-    (helm-sblocate--kill-edit-buffer)
+    (select-window helm-p4locate--original-window)
+    (helm-p4locate--kill-edit-buffer)
     (message "Abort edit")))
 
-(defvar helm-sblocate-edit-map
+(defvar helm-p4locate-edit-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "C-c C-c") 'helm-sblocate--edit-commit)
-    (define-key map (kbd "C-c C-k") 'helm-sblocate--edit-abort)
+    (define-key map (kbd "C-c C-c") 'helm-p4locate--edit-commit)
+    (define-key map (kbd "C-c C-k") 'helm-p4locate--edit-abort)
     map))
 
-(defun helm-sblocate--edit (_candidate)
-  (with-current-buffer (get-buffer-create "*helm-sblocate-edit*")
+(defun helm-p4locate--edit (_candidate)
+  (with-current-buffer (get-buffer-create "*helm-p4locate-edit*")
     (erase-buffer)
-    (set (make-local-variable 'helm-sblocate--default-directory) helm-sblocate--default-directory)
+    (set (make-local-variable 'helm-p4locate--default-directory) helm-p4locate--default-directory)
     (let (buf-content)
-      (with-current-buffer (get-buffer "*helm-sblocate*")
+      (with-current-buffer (get-buffer "*helm-p4locate*")
         (goto-char (point-min))
         (forward-line 1)
         (let* ((body-start (point))
@@ -379,62 +379,62 @@ They are specified to `--ignore' options."
             (set-text-properties body-end (1+ body-end)
                                  '(read-only t rear-nonsticky t)))))))
   (other-window 1)
-  (switch-to-buffer (get-buffer "*helm-sblocate-edit*"))
+  (switch-to-buffer (get-buffer "*helm-p4locate-edit*"))
   (goto-char (point-min))
-  (use-local-map helm-sblocate-edit-map))
+  (use-local-map helm-p4locate-edit-map))
 
-(defun helm-sblocate-edit ()
+(defun helm-p4locate-edit ()
   (interactive)
-  (helm-quit-and-execute-action 'helm-sblocate--edit))
+  (helm-quit-and-execute-action 'helm-p4locate--edit))
 
-(defvar helm-sblocate-map
+(defvar helm-p4locate-map
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map helm-map)
-    (define-key map (kbd "C-c o") 'helm-sblocate--run-other-window-action)
-    (define-key map (kbd "C-l") 'helm-sblocate--up-one-level)
-    (define-key map (kbd "C-c C-e") 'helm-sblocate-edit)
+    (define-key map (kbd "C-c o") 'helm-p4locate--run-other-window-action)
+    (define-key map (kbd "C-l") 'helm-p4locate--up-one-level)
+    (define-key map (kbd "C-c C-e") 'helm-p4locate-edit)
     map)
-  "Keymap for `helm-sblocate'.")
+  "Keymap for `helm-p4locate'.")
 
-(defsubst helm-sblocate--root-directory-p ()
+(defsubst helm-p4locate--root-directory-p ()
   (cl-loop for dir in '(".git/" ".hg/")
            thereis (file-directory-p dir)))
 
-(defun helm-sblocate--up-one-level ()
+(defun helm-p4locate--up-one-level ()
   (interactive)
-  (if (or (not (helm-sblocate--root-directory-p))
+  (if (or (not (helm-p4locate--root-directory-p))
           (y-or-n-p "Here may be project root. Continue searcing ? "))
       (let ((parent (file-name-directory (directory-file-name default-directory))))
         (helm-run-after-quit
          (lambda ()
            (let ((default-directory parent)
-                 (source (helm-sblocate--select-source)))
-             (helm-attrset 'name (helm-sblocate--helm-header default-directory)
+                 (source (helm-p4locate--select-source)))
+             (helm-attrset 'name (helm-p4locate--helm-header default-directory)
                            (symbol-value source))
-             (helm :sources (list source) :buffer "*helm-sblocate*"
-                   :keymap helm-sblocate-map)))))
+             (helm :sources (list source) :buffer "*helm-p4locate*"
+                   :keymap helm-p4locate-map)))))
     (message nil)))
 
 ;;;###autoload
-(defun helm-sblocate (&optional basedir)
+(defun helm-p4locate (&optional basedir)
   (interactive)
-  (setq helm-sblocate--original-window (selected-window))
-  (helm-sblocate--clear-variables)
-  (let ((helm-sblocate--default-directory (or basedir (helm-sblocate--get-default-directory))))
-    (helm-sblocate--query)
-    (let ((source (helm-sblocate--select-source)))
+  (setq helm-p4locate--original-window (selected-window))
+  (helm-p4locate--clear-variables)
+  (let ((helm-p4locate--default-directory (or basedir (helm-p4locate--get-default-directory))))
+    (helm-p4locate--query)
+    (let ((source (helm-p4locate--select-source)))
       (helm-attrset 'search-this-file nil
                     (symbol-value source))
-      (helm-attrset 'name (helm-sblocate--helm-header helm-sblocate--default-directory)
+      (helm-attrset 'name (helm-p4locate--helm-header helm-p4locate--default-directory)
                     (symbol-value source))
-      (helm :sources (list source) :buffer "*helm-sblocate*"
-            :keymap helm-sblocate-map))))
+      (helm :sources (list source) :buffer "*helm-p4locate*"
+            :keymap helm-p4locate-map))))
 
-(defun helm-sblocate--do-sbl-propertize ()
+(defun helm-p4locate--do-p4l-propertize ()
   (with-helm-window
     (goto-char (point-min))
-    (when (helm-sblocate--validate-regexp helm-input)
-      (cl-loop with one-file-p = (helm-sblocate--search-only-one-file-p)
+    (when (helm-p4locate--validate-regexp helm-input)
+      (cl-loop with one-file-p = (helm-p4locate--search-only-one-file-p)
                while (not (eobp))
                do
                (progn
@@ -457,35 +457,35 @@ They are specified to `--ignore' options."
     (goto-char (point-min))
     (helm-display-mode-line (helm-get-current-source))))
 
-(defun helm-sblocate--construct-extension-options ()
-  (cl-loop for ext in helm-do-sbl--extensions
+(defun helm-p4locate--construct-extension-options ()
+  (cl-loop for ext in helm-do-p4l--extensions
            unless (string= ext "*")
            collect
            (concat "-G" (replace-regexp-in-string
                          "\\*" ""
                          (replace-regexp-in-string "\\." "\\\\." ext)))))
 
-(defun helm-sblocate--construct-targets (targets)
+(defun helm-p4locate--construct-targets (targets)
   (cl-loop for target in targets
            collect (file-relative-name target)))
 
-(defun helm-sblocate--construct-do-sbl-command (pattern)
-  (let ((cmds (split-string helm-sblocate-base-command nil t)))
-    (when helm-sblocate-command-option
-      (setq cmds (append cmds (split-string helm-sblocate-command-option nil t))))
-    (when helm-sblocate--extra-options
-      (setq cmds (append cmds (split-string helm-sblocate--extra-options))))
-    (when helm-do-sbl--extensions
-      (setq cmds (append cmds (helm-sblocate--construct-extension-options))))
+(defun helm-p4locate--construct-do-p4l-command (pattern)
+  (let ((cmds (split-string helm-p4locate-base-command nil t)))
+    (when helm-p4locate-command-option
+      (setq cmds (append cmds (split-string helm-p4locate-command-option nil t))))
+    (when helm-p4locate--extra-options
+      (setq cmds (append cmds (split-string helm-p4locate--extra-options))))
+    (when helm-do-p4l--extensions
+      (setq cmds (append cmds (helm-p4locate--construct-extension-options))))
     (setq cmds (append cmds (list "--" pattern)))
-    (if helm-do-sbl--default-target
-        (append cmds (helm-sblocate--construct-targets helm-do-sbl--default-target))
+    (if helm-do-p4l--default-target
+        (append cmds (helm-p4locate--construct-targets helm-do-p4l--default-target))
       cmds)))
 
-(defun helm-sblocate--do-sbl-candidate-process ()
-  (let* ((default-directory (or helm-sblocate--default-directory default-directory))
-         (proc (apply 'start-file-process "helm-do-sbl" nil
-                      (helm-sblocate--construct-do-sbl-command helm-pattern))))
+(defun helm-p4locate--do-p4l-candidate-process ()
+  (let* ((default-directory (or helm-p4locate--default-directory default-directory))
+         (proc (apply 'start-file-process "helm-do-p4l" nil
+                      (helm-p4locate--construct-do-p4l-command helm-pattern))))
     (prog1 proc
       (set-process-sentinel
        proc
@@ -493,70 +493,70 @@ They are specified to `--ignore' options."
          (helm-process-deferred-sentinel-hook
           process event (helm-default-directory))
          (when (string= event "finished\n")
-           (helm-sblocate--do-sbl-propertize)))))))
+           (helm-p4locate--do-p4l-propertize)))))))
 
-(defvar helm-do-sbl-map
+(defvar helm-do-p4l-map
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map helm-map)
-    (define-key map (kbd "C-c o") 'helm-sblocate--run-other-window-action)
-    (define-key map (kbd "C-l") 'helm-sblocate--do-sbl-up-one-level)
-    (define-key map (kbd "C-c C-e") 'helm-sblocate-edit)
+    (define-key map (kbd "C-c o") 'helm-p4locate--run-other-window-action)
+    (define-key map (kbd "C-l") 'helm-p4locate--do-p4l-up-one-level)
+    (define-key map (kbd "C-c C-e") 'helm-p4locate-edit)
     map)
-  "Keymap for `helm-do-sbl'.")
+  "Keymap for `helm-do-p4l'.")
 
-(defvar helm-source-do-sbl
+(defvar helm-source-do-p4l
   `((name . "The Silver Searcher")
-    (candidates-process . helm-sblocate--do-sbl-candidate-process)
-    (persistent-action . helm-sblocate--persistent-action)
-    (action . ,helm-sblocate--actions)
+    (candidates-process . helm-p4locate--do-p4l-candidate-process)
+    (persistent-action . helm-p4locate--persistent-action)
+    (action . ,helm-p4locate--actions)
     (no-matchplugin)
     (nohighlight)
     (requires-pattern . 3)
     (candidate-number-limit . 9999)))
 
-(defun helm-sblocate--do-sbl-up-one-level ()
+(defun helm-p4locate--do-p4l-up-one-level ()
   (interactive)
-  (if (or (not (helm-sblocate--root-directory-p))
+  (if (or (not (helm-p4locate--root-directory-p))
           (y-or-n-p "Here may be project root. Continue searcing ? "))
       (let ((parent (file-name-directory (directory-file-name default-directory)))
             (initial-input helm-input))
         (helm-run-after-quit
          (lambda ()
            (let ((default-directory parent))
-             (helm-attrset 'name (helm-sblocate--helm-header parent)
-                           helm-source-do-sbl)
-             (helm :sources '(helm-source-do-sbl) :buffer "*helm-sblocate*"
-                   :input initial-input :keymap helm-do-sbl-map)))))
+             (helm-attrset 'name (helm-p4locate--helm-header parent)
+                           helm-source-do-p4l)
+             (helm :sources '(helm-source-do-p4l) :buffer "*helm-p4locate*"
+                   :input initial-input :keymap helm-do-p4l-map)))))
     (message nil)))
 
-(defun helm-sblocate--set-do-sbl-option ()
+(defun helm-p4locate--set-do-p4l-option ()
   (when (or (< (prefix-numeric-value current-prefix-arg) 0)
-            helm-sblocate-always-set-extra-option)
-    (let ((option (read-string "Extra options: " (or helm-sblocate--extra-options "")
-                               'helm-sblocate--extra-options-history)))
-      (setq helm-sblocate--extra-options option))))
+            helm-p4locate-always-set-extra-option)
+    (let ((option (read-string "Extra options: " (or helm-p4locate--extra-options "")
+                               'helm-p4locate--extra-options-history)))
+      (setq helm-p4locate--extra-options option))))
 
-(defun helm-sblocate--do-sbl-searched-extensions ()
-  (when (helm-sblocate--has-c-u-preffix-p)
-    (helm-grep-get-file-extensions helm-do-sbl--default-target)))
+(defun helm-p4locate--do-p4l-searched-extensions ()
+  (when (helm-p4locate--has-c-u-preffix-p)
+    (helm-grep-get-file-extensions helm-do-p4l--default-target)))
 
 ;;;###autoload
-(defun helm-do-sbl (&optional basedir)
+(defun helm-do-p4l (&optional basedir)
   (interactive)
   (require 'helm-mode)
-  (setq helm-sblocate--original-window (selected-window))
-  (helm-sblocate--clear-variables)
-  (let* ((helm-sblocate--default-directory (or basedir default-directory))
-         (helm-do-sbl--default-target (or basedir default-directory))
-         (helm-do-sbl--extensions (helm-sblocate--do-sbl-searched-extensions)))
-    (helm-sblocate--set-do-sbl-option)
-    (helm-sblocate--save-current-context)
-    (helm-attrset 'name (helm-sblocate--helm-header helm-sblocate--default-directory)
-                  helm-source-do-sbl)
-    (helm :sources '(helm-source-do-sbl) :buffer "*helm-sblocate*"
-          :input (helm-sblocate--insert-thing-at-point helm-sblocate-insert-at-point)
-          :keymap helm-do-sbl-map)))
+  (setq helm-p4locate--original-window (selected-window))
+  (helm-p4locate--clear-variables)
+  (let* ((helm-p4locate--default-directory (or basedir default-directory))
+         (helm-do-p4l--default-target (or basedir default-directory))
+         (helm-do-p4l--extensions (helm-p4locate--do-p4l-searched-extensions)))
+    (helm-p4locate--set-do-p4l-option)
+    (helm-p4locate--save-current-context)
+    (helm-attrset 'name (helm-p4locate--helm-header helm-p4locate--default-directory)
+                  helm-source-do-p4l)
+    (helm :sources '(helm-source-do-p4l) :buffer "*helm-p4locate*"
+          :input (helm-p4locate--insert-thing-at-point helm-p4locate-insert-at-point)
+          :keymap helm-do-p4l-map)))
 
-(provide 'helm-sblocate)
+(provide 'helm-p4locate)
 
-;;; helm-sblocate.el ends here
+;;; helm-p4locate.el ends here

@@ -8,7 +8,7 @@ if [ $# -lt 1 ]; then
         exit 127
 fi
 
-for line in $(p4 files //mw/Bcgir_core/.../*$1* |
+for line in $(p4 files //mw/Bmatlabcoder/.../*$1* |
         cut -d' ' -f1 |
         cut -d'#' -f1);
 do p4 where $line |
